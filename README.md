@@ -11,10 +11,14 @@ verbose in its output and hard to read.
 
 `> git clone https://github.com/genotrance/notipy`
 
-Edit `config.ini` as required
+- Edit `config.ini` as required
+- Setup [Github](https://github.com/settings/tokens) and [Slack](https://api.slack.com/tokens)
+  auth tokens as configured in config.ini
 
-`> pip install feedparser htmlslacker`
-`> python noti.py` 
+```
+> pip install feedparser htmlslacker
+> python noti.py
+```
 
 # Feedback
 
