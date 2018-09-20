@@ -163,7 +163,7 @@ def get_github(url, method=requests.get):
     else:
         print(url + ":", r.status_code)
 
-    sys.exit()
+    return ""
 
 def get_user():
     if not len(State.user):
@@ -260,7 +260,7 @@ def process_github():
         msg = eval('f"%s"' % State.config.get(
             "output", "message", fallback=TEMPLATES["message"]).replace('"', "'"))
 
-        if "commits/" not in n["subject"]["url"]:
+        if "commits/" not in n["subject"]["url"] and "releases/" not in n["subject"]["url"]:
             e = get_github(n["subject"]["url"].replace("pulls", "issues") + "/events")
             c = get_github(n["subject"]["url"].replace("pulls", "issues") + "/comments")
             if len(e) and len(c):
@@ -350,8 +350,13 @@ def process_feeds():
             key=lambda entry: time.mktime(entry.updated_parsed)):
                 curr = time.mktime(e.updated_parsed)
                 if curr > last:
-                    e.summary = htmlslacker.HTMLSlacker(
-                        e.summary).get_output().replace("twitter-atreply pretty-link js-nav|ltr|", "")
+                    if hasattr(e, "summary"):
+                        e.summary = htmlslacker.HTMLSlacker(
+                            e.summary).get_output().replace("twitter-atreply pretty-link js-nav|ltr|", "")
+                    else:
+                        print("RSS has no summary")
+                        print(e)
+                        continue
                     if not hasattr(e, "author"):
                         e.author = ""
                     else:
