@@ -280,7 +280,8 @@ def process_github():
                 msg += cmsg(n, c[-1])
             else:
                 o = get_github(n["subject"]["url"].replace("pulls", "issues"))
-                msg += omsg(n, o)
+                if len(o):
+                    msg += omsg(n, o)
 
         once = False
         for section in State.config.sections():
