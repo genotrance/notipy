@@ -383,9 +383,7 @@ def main():
             except RateLimit:
                 pass
             time.sleep(State.sleep)
-    except KeyboardInterrupt:
-        pass
-    except SystemExit:
+    except (KeyboardInterrupt, ConnectionError, SystemExit):
         pass
 
 if __name__ == "__main__":
