@@ -329,6 +329,27 @@ def process_github():
 ###
 # Feeds
 
+def post_entry(channel, e, feed_title):
+    if hasattr(e, "summary"):
+        e.summary = htmlslacker.HTMLSlacker(
+            e.summary).get_output().replace("twitter-atreply pretty-link js-nav|ltr|", "")
+    else:
+        print("RSS has no summary")
+        print(e)
+        return False
+    if not hasattr(e, "author"):
+        e.author = ""
+    else:
+        e.author = "by " + e.author
+    e.title = e.title.split("\n")[0]
+    msg = eval('f"%s"' % State.config.get("output", "feed",
+        fallback=TEMPLATES["feed"]).replace('"', "'"))
+    print("----------------")
+    print(channel + " <= " + msg)
+    post_slack(channel, msg, feed_title)
+
+    return True
+
 def process_feeds():
     for section in State.config.sections():
         if "feed:" not in section:
@@ -336,40 +357,39 @@ def process_feeds():
 
         source = State.config.get(section, "source", fallback="")
         channel = State.config.get(section, "channel", fallback="")
+        method = State.config.get(section, "method", fallback="date")
 
         if not source or not channel:
             print("Source or channel not specified for " + section)
             continue
 
+        if method not in ["diff", "date"]:
+            print("Bad method specified - diff|date supported")
+            continue
+
         feed = feedparser.parse(source)
-        last = 0
-        if section in State.data:
-            last = State.data[section]
-        else:
-            State.data[section] = 0
-        for e in sorted(feed.entries,
-            key=lambda entry: time.mktime(entry.updated_parsed)):
-                curr = time.mktime(e.updated_parsed)
-                if curr > last:
-                    if hasattr(e, "summary"):
-                        e.summary = htmlslacker.HTMLSlacker(
-                            e.summary).get_output().replace("twitter-atreply pretty-link js-nav|ltr|", "")
-                    else:
-                        print("RSS has no summary")
-                        print(e)
-                        continue
-                    if not hasattr(e, "author"):
-                        e.author = ""
-                    else:
-                        e.author = "by " + e.author
-                    e.title = e.title.split("\n")[0]
-                    msg = eval('f"%s"' % State.config.get("output", "feed",
-                        fallback=TEMPLATES["feed"]).replace('"', "'"))
-                    print("----------------")
-                    print(channel + " <= " + msg)
-                    post_slack(channel, msg, feed.feed.title)
-                    last = curr
-        if State.data[section] < last:
+        if method == "date":
+            last = 0.0
+            if section in State.data and isinstance(State.data[section], float):
+                last = State.data[section]
+            else:
+                State.data[section] = 0.0
+            for e in sorted(feed.entries,
+                key=lambda entry: time.mktime(entry.updated_parsed)):
+                    curr = time.mktime(e.updated_parsed)
+                    if curr > last and post_entry(channel, e, feed.feed.title):
+                        last = curr
+            if State.data[section] < last:
+                State.data[section] = last
+                save_data()
+        elif method == "diff":
+            last = []
+            if section not in State.data or isinstance(State.data[section], float):
+                State.data[section] = []
+            for e in feed.entries:
+                if e.link not in State.data[section]:
+                    post_entry(channel, e, feed.feed.title)
+                last.append(e.link)
             State.data[section] = last
             save_data()
 
