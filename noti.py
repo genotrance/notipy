@@ -27,7 +27,7 @@ TEMPLATES = {
 
     "filter": "head_ref_deleted, head_ref_restored, assigned, labeled",
 
-    "feed": "*<{e.link}|{e.title}>* @ _n{e.updated}_ {e.author}\\n\\n{e.summary}"
+    "feed": "*<{e.link}|{e.title}>* {e.author}\\n\\n{e.summary}"
 }
 
 class State(object):
@@ -329,10 +329,15 @@ def process_github():
 ###
 # Feeds
 
+def clean_summary(summary):
+	summary = htmlslacker.HTMLSlacker(summary).get_output()
+	summary = summary.replace("twitter-atreply pretty-link js-nav|ltr|", "")
+	summary = re.sub("<(slashpop|nobg).*?> ", "", summary)
+	return summary
+
 def post_entry(channel, e, feed_title):
     if hasattr(e, "summary"):
-        e.summary = htmlslacker.HTMLSlacker(
-            e.summary).get_output().replace("twitter-atreply pretty-link js-nav|ltr|", "")
+        e.summary = clean_summary(e.summary)
     else:
         print("RSS has no summary")
         print(e)
@@ -383,14 +388,16 @@ def process_feeds():
                 State.data[section] = last
                 save_data()
         elif method == "diff":
-            last = []
             if section not in State.data or isinstance(State.data[section], float):
                 State.data[section] = []
             for e in feed.entries:
                 if e.link not in State.data[section]:
                     post_entry(channel, e, feed.feed.title)
-                last.append(e.link)
-            State.data[section] = last
+                else:
+                    State.data[section].remove(e.link)
+                State.data[section].append(e.link)
+            if len(State.data[section]) > 500:
+                State.data[section].pop(0)
             save_data()
 
 def main():
