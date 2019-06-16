@@ -2,6 +2,7 @@ import json
 import os
 import re
 import requests
+import socket
 import sys
 import time
 
@@ -14,6 +15,7 @@ except ImportError:
     import ConfigParser as configparser
 
 GHLINK = {"api.": "", "repos/": "", "users/": "", "pulls": "pull"}
+TIMEOUT = 30
 
 # https://developer.github.com/v3/activity/notifications/#list-your-notifications
 TEMPLATES = {
@@ -145,12 +147,23 @@ def get_github_auth():
 
     return {"Authorization": "token " + token}
 
-def get_github(url, method=requests.get):
+def get_github(url, method=requests.get, retry=2):
     if State.limit == 0 and time.time() < State.until:
         print("Rate limit exceeded")
         raise RateLimit()
 
-    r = method(url, headers=get_github_auth())
+    if retry == 0:
+        return ""
+
+    try:
+        print("Opening " + url)
+        r = method(url, headers=get_github_auth(), timeout=TIMEOUT)
+        time.sleep(0.1)
+    except requests.exceptions.ConnectionError:
+        time.sleep(30)
+        print("Retry connection error: get_github()")
+        return get_github(url, method, retry-1)
+
     if r.status_code < 300:
         State.limit = int(r.headers["X-RateLimit-Remaining"])
         State.until = int(r.headers["X-RateLimit-Reset"])
@@ -208,19 +221,21 @@ def post_slack(channel, text, user="", avatar="", retry=2):
     url = "https://slack.com/api/chat.postMessage"
 
     try:
-        r = requests.post(url, params)
+        print("Posting " + url)
+        r = requests.post(url, params, timeout=TIMEOUT)
+        time.sleep(1)
     except requests.exceptions.ConnectionError:
-        time.sleep(5)
-        print("Retry connection error")
+        time.sleep(30)
+        print("Retry connection error: post_slack()")
         return post_slack(channel, text, user, avatar, retry-1)
 
     if r.text:
         if r.json()["ok"] == False:
-            time.sleep(5)
+            time.sleep(30)
             print("Retry since returned false")
             return post_slack(channel, text, user, avatar, retry-1)
     else:
-        time.sleep(5)
+        time.sleep(30)
         print("Retry since blank reply from Slack")
         return post_slack(channel, text, user, avatar, retry-1)
 
@@ -401,14 +416,17 @@ def process_feeds():
             save_data()
 
 def main():
+    socket.setdefaulttimeout(TIMEOUT)
     parse_config()
     try:
         while True:
+            print("Processing queue")
             try:
                 process_github()
                 process_feeds()
             except RateLimit:
                 pass
+            print("Done processing")
             time.sleep(State.sleep)
     except (KeyboardInterrupt, ConnectionError, SystemExit):
         pass
